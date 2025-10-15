@@ -2,12 +2,15 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Literal
+import openai
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
 
 # Load environment variables
 load_dotenv()
+
+# Set OpenAI API key
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -29,20 +32,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize OpenAI client lazily
-def get_openai_client():
-    """Get OpenAI client, initializing it lazily"""
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+# Helper function to get OpenAI response
+def get_response(prompt: str):
+    """Get response from OpenAI API"""
+    if not openai.api_key:
         raise HTTPException(
             status_code=500,
             detail="OPENAI_API_KEY not configured. Please set it in environment variables."
         )
-    # Explicitly initialize without custom http client to avoid proxy issues on Vercel
-    return OpenAI(
-        api_key=api_key,
-        max_retries=2,
-        timeout=30.0
+    return openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
     )
 
 
@@ -77,36 +77,20 @@ async def get_recipe(request: RecipeRequest):
     - **diet_type**: Either 'vegetarian' or 'vegan'
     """
     try:
-        # Get OpenAI client
-        client = get_openai_client()
-        
-        # Create prompt for GPT-4
-        prompt = f"""Generate a simple {request.diet_type} dinner recipe. 
-        Include:
-        - Recipe name
-        - Cooking time
-        - Ingredients list
-        - Step-by-step instructions
-        
-        Keep it simple and easy to follow. Make it delicious and healthy."""
+        # Create prompt
+        prompt = f"""You are a helpful chef assistant specializing in simple, healthy recipes.
+
+Generate a simple {request.diet_type} dinner recipe. 
+Include:
+- Recipe name
+- Cooking time
+- Ingredients list
+- Step-by-step instructions
+
+Keep it simple and easy to follow. Make it delicious and healthy."""
         
         # Call OpenAI API
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful chef assistant specializing in simple, healthy recipes."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0.7,
-            max_tokens=500
-        )
-        
+        response = get_response(prompt)
         recipe_text = response.choices[0].message.content
         
         return RecipeResponse(
