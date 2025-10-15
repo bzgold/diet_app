@@ -29,12 +29,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize OpenAI client
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise ValueError("OPENAI_API_KEY not found in environment variables")
-
-client = OpenAI(api_key=api_key)
+# Initialize OpenAI client lazily
+def get_openai_client():
+    """Get OpenAI client, initializing it lazily"""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY not configured. Please set it in environment variables."
+        )
+    return OpenAI(api_key=api_key)
 
 
 # Request model
@@ -68,6 +72,9 @@ async def get_recipe(request: RecipeRequest):
     - **diet_type**: Either 'vegetarian' or 'vegan'
     """
     try:
+        # Get OpenAI client
+        client = get_openai_client()
+        
         # Create prompt for GPT-4
         prompt = f"""Generate a simple {request.diet_type} dinner recipe. 
         Include:
