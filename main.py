@@ -38,7 +38,12 @@ def get_openai_client():
             status_code=500,
             detail="OPENAI_API_KEY not configured. Please set it in environment variables."
         )
-    return OpenAI(api_key=api_key)
+    # Explicitly initialize without custom http client to avoid proxy issues on Vercel
+    return OpenAI(
+        api_key=api_key,
+        max_retries=2,
+        timeout=30.0
+    )
 
 
 # Request model
